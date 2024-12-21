@@ -1,8 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.schemas import user_dto
 from src.service.login_service import user_login
 from src.database.models import models
 from src.auth.handler_auth import signJWT
@@ -18,3 +16,16 @@ async def login(uid: int):
     raise HTTPException(status_code=404, detail="Item Not Found")
 
 
+@router.post("/register")
+async def create_user(id: int, email: str, role: str, db: AsyncSession):
+    async with db.begin():
+        existing_user = await db.execute(select(models.UserRow).filter_by(email=email))
+        if existing_user.scalars().first():
+            raise HTTPException(status_code=400, detail="Email already registered")
+
+        new_user = models.UserRow(id=id, email=email, role=role)
+        db.add(new_user)
+
+    await db.commit()
+
+    return {"id": new_user.id, "email": new_user.email, "role": new_user.role}
