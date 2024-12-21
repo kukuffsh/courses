@@ -15,9 +15,11 @@ courses_router = APIRouter(tags=['courses'])
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-@courses_router.post('/course', response_model=courses_dto.Course, status_code=status.HTTP_201_CREATED)
-async def create_course(course: courses_dto.CourseCreate) -> courses_dto.Course:
-    return await courses_service.create_course(course)
+@courses_router.post('/course', response_model=courses_dto.Course, status_code=status.HTTP_201_CREATED,
+                     dependencies=[Depends(JWTBearer())])
+async def create_course(course: courses_dto.CourseCreate, jwt: JWTBearer = Depends(JWTBearer())) -> courses_dto.Course:
+    role = decodeJWT(jwt).get('role')
+    return await courses_service.create_course(role, course)
 
 
 @courses_router.put('/course/{course_id}/update_banner', response_model=courses_dto.Course,
@@ -25,7 +27,6 @@ async def create_course(course: courses_dto.CourseCreate) -> courses_dto.Course:
 async def update_banner(course_id: int, file: UploadFile = File(...),
                         jwt: JWTBearer = Depends(JWTBearer())) -> courses_dto.Course:
     role = decodeJWT(jwt).get('role')
-    print(role)
     return await courses_service.update_banner(role, course_id, file)
 
 
