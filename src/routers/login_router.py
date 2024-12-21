@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from src.database.database import async_session
 from src.service.login_service import user_login
 from src.database.models import models
 from src.auth.handler_auth import signJWT
@@ -17,8 +17,8 @@ async def login(uid: int):
 
 
 @router.post("/register")
-async def create_user(id: int, email: str, role: str, db: AsyncSession):
-    async with db.begin():
+async def create_user(id: int, email: str, role: str):
+    async with async_session() as db:
         existing_user = await db.execute(select(models.UserRow).filter_by(email=email))
         if existing_user.scalars().first():
             raise HTTPException(status_code=400, detail="Email already registered")
