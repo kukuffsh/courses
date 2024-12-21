@@ -2,10 +2,10 @@
 FROM python:3.10
 
 # Устанавливаем рабочую директорию в контейнере
-WORKDIR /
+WORKDIR /courses
 
 # Копируем локальный requirements.txt в контейнер
-COPY requirements.txt /
+COPY requirements.txt /courses
 
 # Устанавливаем зависимости
 RUN pip install --no-cache-dir -r requirements.txt
