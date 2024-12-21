@@ -26,6 +26,7 @@ async def create_user(id: int, email: str, role: str):
         new_user = models.UserRow(id=id, email=email, role=role)
         db.add(new_user)
 
-    await db.commit()
+        await db.commit()
+        await db.refresh(new_user)
 
     return {"id": new_user.id, "email": new_user.email, "role": new_user.role}
