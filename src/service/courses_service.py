@@ -6,20 +6,22 @@ from fastapi import UploadFile, HTTPException, status
 from src.database.models import models
 
 
-async def create_course(course: courses_dto.CourseCreate) -> courses_dto.Course:
-    async with async_session() as session:
-        course = models.CourseRow(
-            name=course.name,
-            description=course.description,
-            banner_url=course.banner_url,
-            schedule=course.schedule,
-            is_from_misis=course.is_from_misis,
-            start_date=course.start_date,
-            end_date=course.end_date,
-            points_per_visit=course.points_per_visit
-        )
-        course = await courses.db_create_course(session, course)
-        return courses_dto.Course.from_orm(course)
+async def create_course(role, course: courses_dto.CourseCreate) -> courses_dto.Course:
+    if role == 'admin':
+        async with async_session() as session:
+            course = models.CourseRow(
+                name=course.name,
+                description=course.description,
+                banner_url=course.banner_url,
+                schedule=course.schedule,
+                is_from_misis=course.is_from_misis,
+                start_date=course.start_date,
+                end_date=course.end_date,
+                points_per_visit=course.points_per_visit
+            )
+            course = await courses.db_create_course(session, course)
+            return courses_dto.Course.from_orm(course)
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
 
 async def update_banner(role: str, course_id: int, file: UploadFile) -> courses_dto.Course:
