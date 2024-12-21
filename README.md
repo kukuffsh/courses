@@ -144,5 +144,3 @@
 - **SQLAlchemy**: Для работы с базой данных.
 - **PostgreSQL**: Для хранения данных.
 - **Uvicorn**: Для запуска FastAPI приложения.
-
-## http/logrus.cc:8000/docs
