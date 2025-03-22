@@ -1,9 +1,16 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
+from enum import Enum
+
+class UserRole(str, Enum):
+    student = "student"
+    teacher = "teacher"
+    admin = "admin"
+
 
 class UserBase(BaseModel):
     email: str
-    role: str
+    role: UserRole = Field(default=UserRole.student, description="Роль пользователя")
 
 class UserCreate(UserBase):
     password: str

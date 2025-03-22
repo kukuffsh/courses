@@ -1,7 +1,15 @@
-from sqlalchemy import Column, Integer, String, Boolean, Date, ForeignKey, Text, Float, JSON, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, Date, ForeignKey, Text, Float, JSON, DateTime, Table
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
+
+#Доп. Таблица ассоциаций
+course_teachers = Table(
+    'course_teachers', Base.metadata,
+    Column('course_id', Integer, ForeignKey('course.id'), primary_key=True),
+    Column('teacher_id', Integer, ForeignKey('user.id'), primary_key=True),
+    Column('is_main', Boolean, default=False)
+)
 
 class CourseRow(Base):
     __tablename__ = 'course'
@@ -16,6 +24,11 @@ class CourseRow(Base):
     end_date = Column(Date, nullable=False)
     points_per_visit = Column(Float, nullable=False)
 
+    teachers = relationship(
+        'UserRow',
+        secondary=course_teachers,
+        back_populates='courses'
+    )
     feedback = relationship("FeedbackRow", back_populates="course")
     enrollments = relationship("EnrollmentRow", back_populates="course")
 
@@ -29,6 +42,12 @@ class UserRow(Base):
     enrollments = relationship("EnrollmentRow", back_populates="user")
     feedback = relationship("FeedbackRow", back_populates="user")
     logs = relationship("LogRow", back_populates="user")
+    courses = relationship(
+        'CourseRow',
+        secondary=course_teachers,
+        back_populates='teachers'
+    )
+
 
 class EnrollmentRow(Base):
     __tablename__ = 'enrollment'

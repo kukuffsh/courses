@@ -1,9 +1,12 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
+
+from sqlalchemy.exc import SQLAlchemyError
 from src.database.models import models
 from src.schemas import courses_dto, enrollment_dto, feedback_dto
 from sqlalchemy import select, Sequence
-from typing import Optional
+from typing import Optional, List
 from datetime import date
 from src.service import save_banner
 from fastapi import UploadFile, HTTPException, status
@@ -102,12 +105,22 @@ async def db_update_course_info(session: AsyncSession, course_id: int,
 
 
 async def db_delete_course(session: AsyncSession, course_id: int) -> models.CourseRow:
-    query = select(models.CourseRow).where(models.CourseRow.id == course_id)
-    result = await session.execute(query)
-    course = result.scalar_one_or_none()
-    await session.delete(course)
-    await session.commit()
-    return course
+    try:
+        query = select(models.CourseRow).where(models.CourseRow.id == course_id)
+        result = await session.execute(query)
+        course = result.scalar_one_or_none()
+
+        if course is None:
+            raise Exception(f"Course with ID {course_id} not found")
+
+        await session.delete(course)
+        await session.commit()
+
+        return course
+
+    except SQLAlchemyError as e:
+        await session.rollback()  # Откатываем транзакцию в случае ошибки
+        raise Exception(f"Error deleting course with ID {course_id}: {str(e)}")
 
 
 async def db_get_enrolled_users(session: AsyncSession, course_id: int) -> Sequence[models.UserRow]:
@@ -117,14 +130,17 @@ async def db_get_enrolled_users(session: AsyncSession, course_id: int) -> Sequen
 
     return users
 
+
 async def db_get_all_courses(session) -> Sequence[models.UserRow]:
-    query = select(models.CourseRow)
-    result = await session.execute(query)
-    courses = result.scalars().all()
+    result = await session.execute(
+        select(models.CourseRow)
+        .options(selectinload(models.CourseRow.teachers))
+    )
+    return result.scalar_one_or_none()
 
-    return courses
 
-async def db_register_user_on_course(session: AsyncSession, enrollment_data: enrollment_dto.EnrollmentCreate) -> models.EnrollmentRow:
+async def db_register_user_on_course(session: AsyncSession,
+                                     enrollment_data: enrollment_dto.EnrollmentCreate) -> models.EnrollmentRow:
     query_course = select(models.CourseRow).where(models.CourseRow.id == enrollment_data.course_id)
     result_course = await session.execute(query_course)
     course = result_course.scalar_one_or_none()
@@ -160,6 +176,7 @@ async def db_register_user_on_course(session: AsyncSession, enrollment_data: enr
 
     return new_enrollment
 
+
 async def db_write_feedback(session: AsyncSession, filter: feedback_dto.FeedbackCreate) -> models.FeedbackRow:
     query_course = select(models.CourseRow).where(models.CourseRow.id == filter.course_id)
     result_course = await session.execute(query_course)
@@ -180,3 +197,58 @@ async def db_write_feedback(session: AsyncSession, filter: feedback_dto.Feedback
     await session.refresh(new_feedback)
 
     return new_feedback
+
+
+async def get_course_by_id(session: AsyncSession, course_id: int,
+                           load_teachers: bool = False) -> Optional[models.CourseRow]:
+    try:
+        query = select(models.CourseRow).where(models.CourseRow.id == course_id)
+
+        if load_teachers:
+            query = query.options(selectinload(models.CourseRow.teachers))
+
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
+
+    except Exception as e:
+        raise ValueError(f"Database error: {str(e)}") from e
+
+async def get_full_course(session: AsyncSession, course_id: int) -> models.CourseRow:
+    result = await session.execute(
+        select(models.CourseRow)
+        .options(selectinload(models.CourseRow.teachers))
+        .where(models.CourseRow.id == course_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def db_add_course_teachers(
+        session: AsyncSession,
+        course_id: int,
+        teacher_ids: List[int]
+) -> None:
+    try:
+        existing_links = await session.execute(
+            select(models.course_teachers).where(
+                models.course_teachers.course_id == course_id,
+                models.course_teachers.teacher_id.in_(teacher_ids)
+            )
+        )
+        existing_ids = {link.teacher_id for link in existing_links.scalars()}
+        new_ids = [id for id in teacher_ids if id not in existing_ids]
+
+        if new_ids:
+            session.add_all([
+                models.course_teachers(
+                    course_id=course_id,
+                    teacher_id=teacher_id
+                ) for teacher_id in new_ids
+            ])
+            await session.commit()
+
+    except IntegrityError as e:
+        await session.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Ошибка при добавлении преподавателей"
+        ) from e

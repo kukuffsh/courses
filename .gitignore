@@ -1,0 +1,22 @@
+# Игнорировать все файлы .log
+*.log
+
+# Игнорировать папку node_modules
+node_modules/
+
+# Игнорировать файл конфигурации IDE
+.idea/
+
+# Игнорировать все файлы в папке temp
+temp/*
+
+# Игнорировать конкретный файл
+config.local.json
+
+.env
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
