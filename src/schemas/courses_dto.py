@@ -32,23 +32,37 @@ class CourseUpdate(BaseModel):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     points_per_visit: Optional[float] = Field(None, gt=0)
-    teacher_ids: Optional[List[int]] = None
+    teacher_ids: Optional[List[int]] = []
 
 class Course(CourseBase):
     id: int
-    teachers: List['User'] = Field(default_factory=list)
+    teachers: List[int] = Field(default_factory=list)
 
     @classmethod
-    def from_attributes(cls, obj: dict):
+    def from_attributes(cls, obj: models.CourseRow):
         if isinstance(obj, models.CourseRow):
-            obj = obj.__dict__
-        return cls(**obj)
+            data = {
+                "id": obj.id,
+                "name": obj.name,
+                "description": obj.description,
+                "banner_url": obj.banner_url,
+                "schedule": obj.schedule,
+                "is_from_misis": obj.is_from_misis,
+                "start_date": obj.start_date,
+                "end_date": obj.end_date,
+                "points_per_visit": obj.points_per_visit,
+                "teacher_ids": [],
+                "teachers": [teacher.id for teacher in obj.teachers]
+            }
+            return cls(**data)
+        else:
+            return cls(**obj)
 
     class Config:
         orm_mode = True
+        from_attributes = True
 
 class User(BaseModel):
     id: int
-    name: str
 
 Course.model_rebuild()

@@ -97,18 +97,24 @@ async def add_course_teachers(
         await courses.db_add_course_teachers(session, course_id, teacher_ids)
 
         updated_course = await courses.get_full_course(session, course_id)
-        return courses_dto.Course.from_orm(updated_course)
+        return courses_dto.Course.from_attributes(updated_course)
 
 
 async def get_all_courses() -> Sequence[courses_dto.Course]:
     async with async_session() as session:
-        return await courses.db_get_all_courses(session)
+        courses_list = await courses.db_get_all_courses(session)
+        return [courses_dto.Course.from_attributes(course) for course in courses_list]
 
 
 async def register_user_on_course(filter: enrollment_dto.EnrollmentCreate) -> enrollment_dto.Enrollment:
     async with async_session() as session:
-        course = await courses.db_register_user_on_course(session, filter)
-        return enrollment_dto.Enrollment.from_attributes(course)
+        try:
+            enrollment = await courses.db_register_user_on_course(session, filter)
+            return enrollment_dto.Enrollment.from_attributes(enrollment)
+        except HTTPException as e:
+            raise e
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Ошибка при регистрации на курс: {str(e)}")
 
 
 async def write_feedback(filter: feedback_dto.FeedbackCreate) -> feedback_dto.Feedback:

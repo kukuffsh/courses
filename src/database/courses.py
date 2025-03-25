@@ -106,21 +106,41 @@ async def db_update_course_info(session: AsyncSession, course_id: int,
 
 async def db_delete_course(session: AsyncSession, course_id: int) -> models.CourseRow:
     try:
-        query = select(models.CourseRow).where(models.CourseRow.id == course_id)
-        result = await session.execute(query)
+        # Получаем курс со всеми связями
+        result = await session.execute(
+            select(models.CourseRow)
+            .options(
+                selectinload(models.CourseRow.teachers),
+                selectinload(models.CourseRow.enrollments),
+                selectinload(models.CourseRow.feedback)
+            )
+            .where(models.CourseRow.id == course_id)
+        )
         course = result.scalar_one_or_none()
+        if not course:
+            raise ValueError(f"Course {course_id} not found")
 
-        if course is None:
-            raise Exception(f"Course with ID {course_id} not found")
+        # Сохраняем копию курса для возврата после удаления
+        course_copy = models.CourseRow(
+            id=course.id,
+            name=course.name,
+            description=course.description,
+            banner_url=course.banner_url,
+            schedule=course.schedule,
+            is_from_misis=course.is_from_misis,
+            start_date=course.start_date,
+            end_date=course.end_date,
+            points_per_visit=course.points_per_visit
+        )
 
+        # Удаляем курс
         await session.delete(course)
         await session.commit()
-
-        return course
+        return course_copy
 
     except SQLAlchemyError as e:
-        await session.rollback()  # Откатываем транзакцию в случае ошибки
-        raise Exception(f"Error deleting course with ID {course_id}: {str(e)}")
+        await session.rollback()
+        raise RuntimeError(f"Database error: {str(e)}") from e
 
 
 async def db_get_enrolled_users(session: AsyncSession, course_id: int) -> Sequence[models.UserRow]:
@@ -131,12 +151,16 @@ async def db_get_enrolled_users(session: AsyncSession, course_id: int) -> Sequen
     return users
 
 
-async def db_get_all_courses(session) -> Sequence[models.UserRow]:
+async def db_get_all_courses(session) -> Sequence[models.CourseRow]:
     result = await session.execute(
         select(models.CourseRow)
-        .options(selectinload(models.CourseRow.teachers))
+        .options(
+            selectinload(models.CourseRow.teachers),
+            selectinload(models.CourseRow.enrollments),
+            selectinload(models.CourseRow.feedback)
+        )
     )
-    return result.scalar_one_or_none()
+    return result.scalars().all()
 
 
 async def db_register_user_on_course(session: AsyncSession,
@@ -146,14 +170,14 @@ async def db_register_user_on_course(session: AsyncSession,
     course = result_course.scalar_one_or_none()
 
     if not course:
-        raise ValueError("Course not found")
+        raise HTTPException(status_code=404, detail="Курс не найден")
 
     query_user = select(models.UserRow).where(models.UserRow.id == enrollment_data.user_id)
     result_user = await session.execute(query_user)
     user = result_user.scalar_one_or_none()
 
     if not user:
-        raise ValueError("User not found")
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
 
     query_existing_enrollment = select(models.EnrollmentRow).where(
         models.EnrollmentRow.user_id == enrollment_data.user_id,
@@ -163,18 +187,22 @@ async def db_register_user_on_course(session: AsyncSession,
     existing_enrollment = result_enrollment.scalar_one_or_none()
 
     if existing_enrollment:
-        raise ValueError("User already registered for this course")
+        raise HTTPException(status_code=400, detail="Пользователь уже зарегистрирован на этот курс")
 
     new_enrollment = models.EnrollmentRow(
         user_id=enrollment_data.user_id,
         course_id=enrollment_data.course_id,
-        status="registered"
+        status=enrollment_data.status
     )
 
-    session.add(new_enrollment)
-    await session.commit()
-
-    return new_enrollment
+    try:
+        session.add(new_enrollment)
+        await session.commit()
+        await session.refresh(new_enrollment)
+        return new_enrollment
+    except SQLAlchemyError as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {str(e)}")
 
 
 async def db_write_feedback(session: AsyncSession, filter: feedback_dto.FeedbackCreate) -> models.FeedbackRow:
@@ -252,3 +280,44 @@ async def db_add_course_teachers(
             status_code=400,
             detail="Ошибка при добавлении преподавателей"
         ) from e
+
+async def db_remove_course_teacher(
+        session: AsyncSession,
+        course_id: int,
+        teacher_id: int
+) -> None:
+    try:
+        # Проверяем, существует ли связь
+        result = await session.execute(
+            select(models.course_teachers).where(
+                models.course_teachers.c.course_id == course_id,
+                models.course_teachers.c.teacher_id == teacher_id
+            )
+        )
+        link = result.scalar_one_or_none()
+        
+        if not link:
+            raise HTTPException(
+                status_code=404,
+                detail="Преподаватель не найден на данном курсе"
+            )
+        
+        # Удаляем связь
+        await session.execute(
+            models.course_teachers.delete().where(
+                models.course_teachers.c.course_id == course_id,
+                models.course_teachers.c.teacher_id == teacher_id
+            )
+        )
+        
+        await session.commit()
+        
+    except HTTPException as e:
+        await session.rollback()
+        raise e
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка при удалении преподавателя с курса: {str(e)}"
+        )

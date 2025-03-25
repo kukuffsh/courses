@@ -6,7 +6,7 @@ Base = declarative_base()
 #Доп. Таблица ассоциаций
 course_teachers = Table(
     'course_teachers', Base.metadata,
-    Column('course_id', Integer, ForeignKey('course.id'), primary_key=True),
+    Column('course_id', Integer, ForeignKey('course.id', ondelete="CASCADE"), primary_key=True),
     Column('teacher_id', Integer, ForeignKey('user.id'), primary_key=True),
     Column('is_main', Boolean, default=False)
 )
@@ -29,13 +29,14 @@ class CourseRow(Base):
         secondary=course_teachers,
         back_populates='courses'
     )
-    feedback = relationship("FeedbackRow", back_populates="course")
-    enrollments = relationship("EnrollmentRow", back_populates="course")
+    feedback = relationship("FeedbackRow", back_populates="course", cascade="all, delete-orphan")
+    enrollments = relationship("EnrollmentRow", back_populates="course", cascade="all, delete-orphan")
 
 class UserRow(Base):
     __tablename__ = 'user'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+
     email = Column(String, unique=True, nullable=False)
     role = Column(String, nullable=False)
 
@@ -54,12 +55,12 @@ class EnrollmentRow(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('user.id'), nullable=False)
-    course_id = Column(Integer, ForeignKey('course.id'), nullable=False)
+    course_id = Column(Integer, ForeignKey('course.id', ondelete="CASCADE"), nullable=False)
     status = Column(String, nullable=False)
 
     user = relationship("UserRow", back_populates="enrollments")
     course = relationship("CourseRow", back_populates="enrollments")
-    attendance = relationship("AttendanceRow", back_populates="enrollment")
+    attendance = relationship("AttendanceRow", back_populates="enrollment", cascade="all, delete-orphan")
 
 class AttendanceRow(Base):
     __tablename__ = 'attendance'
@@ -75,7 +76,7 @@ class FeedbackRow(Base):
     __tablename__ = 'feedback'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    course_id = Column(Integer, ForeignKey('course.id'), nullable=False)
+    course_id = Column(Integer, ForeignKey('course.id', ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey('user.id'), nullable=False)
     rating = Column(Float, nullable=False)
     comment = Column(Text, nullable=True)

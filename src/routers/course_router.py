@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, status, UploadFile, File, Depends
+from fastapi import APIRouter, status, UploadFile, File, Depends, HTTPException, Body
 from sqlalchemy import Sequence
 
 from src.service import courses_service
@@ -28,7 +28,7 @@ async def create_course(course: courses_dto.CourseCreate, jwt: JWTBearer = Depen
     return await courses_service.create_course(role, course)
 
 
-@courses_router.put('/course/{course_id}/banner', response_model=courses_dto.Course,
+@courses_router.put('/course/{course_id}', response_model=courses_dto.Course,
                     dependencies=[Depends(JWTBearer())])
 async def update_banner(course_id: int, file: UploadFile = File(...),
                         jwt: JWTBearer = Depends(JWTBearer())) -> courses_dto.Course:
@@ -44,15 +44,15 @@ async def update_banner(course_id: int, file: UploadFile = File(...),
     return await courses_service.update_banner(role, course_id, file)
 
 
-@courses_router.put('/course/{course_id}/update_schedule', response_model=courses_dto.Course,
-                    dependencies=[Depends(JWTBearer())])
-async def update_schedule(course_id: int, schedule: courses_dto.CourseUpdate,
-                          jwt: JWTBearer = Depends(JWTBearer())) -> courses_dto.Course:
-    role = decodeJWT(jwt).get('role')
-    return await courses_service.update_schedule(role, course_id, schedule)
+# @courses_router.put('/course/{course_id}/update_schedule', response_model=courses_dto.Course,
+#                     dependencies=[Depends(JWTBearer())])
+# async def update_schedule(course_id: int, schedule: courses_dto.CourseUpdate,
+#                           jwt: JWTBearer = Depends(JWTBearer())) -> courses_dto.Course:
+#     role = decodeJWT(jwt).get('role')
+#     return await courses_service.update_schedule(role, course_id, schedule)
 
 
-@courses_router.delete('/course/{course_id}/delete_course', response_model=courses_dto.Course,
+@courses_router.delete('/course/{course_id}/', response_model=courses_dto.Course,
                        dependencies=[Depends(JWTBearer())], status_code=status.HTTP_200_OK)
 async def delete_course(course_id: int, jwt: JWTBearer = Depends(JWTBearer())) -> courses_dto.Course:
     role = decodeJWT(jwt).get('role')
@@ -99,11 +99,14 @@ async def add_course_teachers(course_id: int, teacher_ids: List[int],
 
 @courses_router.post("/enroll", response_model=enrollment_dto.Enrollment, status_code=status.HTTP_201_CREATED,
                      dependencies=[Depends(JWTBearer())])
-async def enroll_on_course(filter: enrollment_dto.EnrollmentCreate,
-                           jwt: JWTBearer = Depends(JWTBearer())) -> enrollment_dto.Enrollment:
+async def enroll_on_course(course_id: int = Body(..., embed=True), jwt: JWTBearer = Depends(JWTBearer())) -> enrollment_dto.Enrollment:
     user_id = decodeJWT(jwt).get('user_id')
-    filter.user_id = user_id
-    return await courses_service.register_user_on_course(filter)
+    
+    enrollment_data = enrollment_dto.EnrollmentCreate(
+        course_id=course_id,
+        user_id=user_id
+    )
+    return await courses_service.register_user_on_course(enrollment_data)
 
 
 @courses_router.post("/feedback", response_model=feedback_dto.Feedback, status_code=status.HTTP_201_CREATED,
